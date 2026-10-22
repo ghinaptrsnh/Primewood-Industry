@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Primewood Industry | Woodchips & Kayu Rencek Palembang</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  html{scroll-behavior:smooth;scroll-padding-top:72px}
+  body{font-family:'Poppins',sans-serif}
+  .qr div{aspect-ratio:1}
+  body{background:linear-gradient(180deg,#eef8ec 0%,#ffffff 35%,#f1f8ee 100%) fixed}
+  .rounded-2xl{border-radius:1.75rem!important}
+  .nav-grad{background:linear-gradient(90deg,#0b3a2a,#14663f 60%,#2e9a62);border-bottom:3px solid #8b5a2b}
+  .hero{background:radial-gradient(circle at 85% 8%,rgba(190,240,200,.5),transparent 45%),linear-gradient(135deg,#0b3a2a 0%,#14663f 45%,#62c08a 100%);border-bottom:10px solid #8b5a2b}
+  .blob{position:absolute;border-radius:50%;filter:blur(60px);opacity:.45;animation:drift 9s ease-in-out infinite alternate}
+  @keyframes drift{to{transform:translate(30px,-25px) scale(1.12)}}
+  @media(prefers-reduced-motion:reduce){.blob{animation:none}}
+  .about{background:linear-gradient(180deg,#dff3df,#f4fbf2 60%,#ffffff)}
+  .foot-grad{background:linear-gradient(135deg,#0b3a2a,#14663f);border-top:6px solid #8b5a2b}
+  .chip{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);backdrop-filter:blur(6px)}
+  .bg-green-700{background-image:linear-gradient(135deg,#0f5132,#27a362)!important}
+  .bg-green-700,.btn-wood{transition:transform .2s,filter .2s,box-shadow .2s}
+  .bg-green-700:not(:disabled):hover,.btn-wood:not(:disabled):hover{filter:brightness(1.12);transform:translateY(-2px);box-shadow:0 8px 18px -6px rgba(15,81,50,.5)}
+  .btn-wood{background:linear-gradient(135deg,#5c3a1e,#b07a3f);color:#fff}
+  .woodcard{border:1px solid rgba(139,90,43,.2)}
+  .woodcard:hover{box-shadow:0 18px 34px -14px rgba(92,58,30,.45)}
+</style>
+</head>
+<body class="text-stone-800">
+<div id="app"></div>
+
+<script>
+/* ============ PENGATURAN (ubah di sini) ============ */
+const CFG = {
+  wa: '6282375519309',
+  addr: 'Jl. Cengkeh Dua No. 23 Blok K, Sako, Palembang, Sumatera Selatan.',
+  mapsLink: 'https://maps.app.goo.gl/dw5hV21Y3LEHgzdr6?g_st=ic',
+  admin: { name: 'Admin Primewood', email: 'admin@email.com', pass: '1234' }, // login admin
+  user: { name: 'Customer Demo', email: 'user@email.com', pass: '7890', role: 'customer' } // login customer bawaan
+};
+// use = pengurangan stok per 1 satuan pesanan. woodchips: 1 karung = 16 kg. rencek: 1 pcs.
+const PRODUCTS = {
+  woodchips: { name: 'Woodchips', unit: 'karung', stockUnit: 'kg', use: 16, kgPerUnit: 16, price: 35000, img: 'assets/woodchips.jpeg',
+    desc: 'Woodchips serpihan kayu kering, bersih, dan seragam. Cocok untuk alas kandang, media tanam, bahan bakar, dan kebutuhan industri. Dijual per karung (±16 kg).', initStock: 18000 },
+  rencek: { name: 'Kayu Rencek', unit: 'pcs', stockUnit: 'pcs', use: 1, kgPerUnit: 34 / 3, price: 15000, img: 'assets/kayurencek.jpeg',
+    desc: 'Kayu rencek potongan kecil kering, mudah menyala dan tahan lama. Pas untuk tungku, dapur tradisional, dan usaha kuliner. Dijual per pcs (±11 kg).', initStock: 57000 }
+};
+/* ================================================== */
+
+const $ = s => document.querySelector(s);
+const fmt = n => Math.round(n).toLocaleString('id-ID');
+const rp = n => 'Rp' + fmt(n);
+const db = {
+  get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
+  set: (k, v) => localStorage.setItem(k, JSON.stringify(v))
+};
+const users = () => [CFG.user, ...db.get('pw_users', [])];
+const orders = () => db.get('pw_orders', []);
+const stock = () => db.get('pw_stock', { woodchips: PRODUCTS.woodchips.initStock, rencek: PRODUCTS.rencek.initStock });
+const me = () => { const e = db.get('pw_session', null); return e ? (e === CFG.admin.email ? { ...CFG.admin, role: 'admin' } : users().find(u => u.email === e)) : null; };
+const maxQty = k => Math.floor(stock()[k] / PRODUCTS[k].use);
+
+const S = { view: 'home', role: 'customer', mode: 'login', draft: null, method: null, va: '', lastOrder: null };
+
+/* ---------- AUTH ---------- */
+function login(e) {
+  e.preventDefault();
+  const f = e.target, em = f.email.value.trim().toLowerCase(), pw = f.pass.value;
+  let u = null;
+  if (S.role === 'admin') { if (em === CFG.admin.email && pw === CFG.admin.pass) u = CFG.admin; }
+  else u = users().find(x => x.email === em && x.pass === pw);
+  if (!u) return alert('Email atau password salah untuk peran ' + (S.role === 'admin' ? 'Admin.' : 'Customer.'));
+  db.set('pw_session', em); S.view = 'home'; render(); window.scrollTo(0, 0);
+}
+function register(e) {
+  e.preventDefault();
+  const f = e.target, em = f.email.value.trim().toLowerCase();
+  if (f.pass.value.length < 6) return alert('Password minimal 6 karakter.');
+  if (em === CFG.admin.email || users().some(u => u.email === em)) return alert('Email sudah terdaftar. Silakan login.');
+  db.set('pw_users', [...db.get('pw_users', []), { name: f.name.value.trim(), email: em, pass: f.pass.value, role: 'customer' }]);
+  db.set('pw_session', em); render();
+}
+function logout() { db.set('pw_session', null); S.view = 'home'; S.draft = null; render(); window.scrollTo(0, 0); }
+function setRole(r) { S.role = r; S.mode = 'login'; render(); }
+function setMode(m) { S.mode = m; render(); }
+
+/* ---------- NAVIGASI ---------- */
+function goto(id) {
+  if (S.view !== 'home') { S.view = 'home'; render(); }
+  setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }), 30);
+  return false;
+}
+function nav() {
+  const u = me(), admin = u && u.role === 'admin';
+  const link = (id, t) => `<a href="#${id}" onclick="return goto('${id}')" class="px-3 py-1.5 rounded-lg hover:bg-white/15 transition">${t}</a>`;
+  return `<header class="nav-grad sticky top-0 z-50 text-white shadow-lg">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+      <a href="#home" onclick="return goto('home')" class="font-extrabold text-lg tracking-tight">🌲 Primewood <span class="font-medium text-green-200 hidden sm:inline">Industry</span></a>
+      <nav class="flex items-center gap-1 text-sm font-medium">
+        ${admin ? `<span class="px-3 text-green-200">Panel Admin</span>` : link('home', 'Home') + link('products', 'Products') + link('about', 'About Us') + (u ? `<button onclick="S.view='history';render();window.scrollTo(0,0)" class="px-3 py-1.5 rounded-lg hover:bg-white/15 transition">Riwayat</button>` : '')}
+        ${u ? `<button onclick="logout()" class="ml-1 px-3 py-1.5 rounded-lg bg-white text-green-800 font-semibold hover:bg-green-100 transition">Keluar</button>` : ''}
+      </nav>
+    </div></header>`;
+}
+function footer() {
+  return `<footer class="foot-grad text-green-100 text-center text-sm py-6 mt-10">
+    <p class="font-semibold">Primewood Industry</p><p class="text-green-300">&copy; ${new Date().getFullYear()} Primewood Industry. Hak cipta dilindungi.</p></footer>`;
+}
+
+/* ---------- HOME ---------- */
+function loginBox() {
+  const u = me();
+  if (u) return `<div class="bg-white rounded-2xl shadow-xl p-6 text-stone-800">
+    <p class="text-sm text-stone-500">Masuk sebagai</p><p class="text-xl font-bold text-green-800">${u.name}</p><p class="text-sm text-stone-500 mb-4">${u.email}</p>
+    <a href="#products" onclick="return goto('products')" class="block text-center bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg py-2.5 transition">Lihat produk & pesan</a></div>`;
+  const reg = S.mode === 'register' && S.role === 'customer';
+  const tab = (r, t) => `<button onclick="setRole('${r}')" class="flex-1 py-2 text-sm font-semibold rounded-lg transition ${S.role === r ? 'bg-green-700 text-white' : 'text-stone-500 hover:bg-stone-100'}">${t}</button>`;
+  const inp = 'w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600';
+  return `<div id="login" class="bg-white/95 backdrop-blur rounded-2xl shadow-2xl p-6 text-stone-800 border-t-4 border-amber-700">
+    <h3 class="font-bold text-lg mb-3">${reg ? 'Buat akun customer' : 'Masuk ke akun'}</h3>
+    <div class="flex gap-1 bg-stone-100 p-1 rounded-xl mb-4">${tab('customer', 'Customer')}${tab('admin', 'Admin')}</div>
+    <form onsubmit="${reg ? 'register(event)' : 'login(event)'}" class="space-y-3">
+      ${reg ? `<input name="name" required placeholder="Nama lengkap" class="${inp}">` : ''}
+      <input name="email" type="email" required placeholder="Email (mis. nama@gmail.com)" class="${inp}">
+      <input name="pass" type="password" required placeholder="Password" class="${inp}">
+      <button class="w-full bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg py-2.5 transition">${reg ? 'Daftar' : 'Masuk'}</button>
+    </form>
+    ${S.role === 'customer' ? `<p class="text-sm text-center mt-3 text-stone-500">${reg ? 'Sudah punya akun?' : 'Belum punya akun?'}
+      <button onclick="setMode('${reg ? 'login' : 'register'}')" class="text-green-700 font-semibold hover:underline">${reg ? 'Masuk' : 'Daftar sekarang'}</button></p>` : ''}
+  </div>`;
+}
+function productCard(k) {
+  const p = PRODUCTS[k], s = stock()[k], out = maxQty(k) < 1;
+  return `<article class="woodcard bg-white rounded-2xl shadow-md overflow-hidden hover:-translate-y-2 transition duration-300 flex flex-col">
+    <div class="relative h-52 bg-green-100"><img src="${p.img}" alt="${p.name}" class="w-full h-full object-cover" onerror="this.style.display='none'">
+      ${out ? '<span class="absolute top-3 right-3 bg-red-600 text-white text-xs font-bold px-3 py-1 rounded-full">Stok habis</span>' : ''}</div>
+    <div class="p-5 flex flex-col flex-1">
+      <h3 class="text-xl font-bold text-green-900">${p.name}</h3>
+      <p class="text-sm text-stone-600 mt-2 flex-1">${p.desc}</p>
+      <p class="mt-3 text-sm text-stone-500">Stok tersedia: <b class="${out ? 'text-red-600' : 'text-green-700'}">${fmt(s)} ${p.stockUnit}</b></p>
+      <div class="flex items-center justify-between mt-3">
+        <p class="text-lg font-bold">${rp(p.price)}<span class="text-sm font-normal text-stone-500"> / ${p.unit}</span></p>
+        <button ${out ? 'disabled' : ''} onclick="startOrder('${k}')" class="px-4 py-2 rounded-lg font-semibold text-white transition ${out ? 'bg-stone-400 cursor-not-allowed' : 'btn-wood'}">${out ? 'Habis' : 'Pesan'}</button>
+      </div></div></article>`;
+}
+function homeView() {
+  return `<section id="home" class="hero relative overflow-hidden text-white">
+    <div class="blob w-72 h-72 bg-lime-300 -top-10 -left-10"></div><div class="blob w-80 h-80 bg-amber-600 bottom-0 right-1/3" style="animation-delay:-4s"></div>
+    <div class="relative max-w-6xl mx-auto px-4 py-14 grid lg:grid-cols-2 gap-10 items-center">
+      <div>
+        <h1 class="text-4xl sm:text-5xl font-extrabold leading-tight">Woodchips premium, langsung dari Palembang 🌿</h1>
+        <p class="mt-4 text-green-100 max-w-xl">Woodchips kering, bersih, dan seragam untuk alas ternak, bahan bakar, kerajinan, hingga kebutuhan industri. Pesan online, bayar nontunai, dan konfirmasi lewat WhatsApp.</p>
+        <div class="flex flex-wrap gap-2 mt-5 text-sm"><span class="chip rounded-full px-3 py-1">✨ Kering & bersih</span><span class="chip rounded-full px-3 py-1">📲 Bayar QRIS / VA</span><span class="chip rounded-full px-3 py-1">💬 Konfirmasi WhatsApp</span></div>
+        <div class="mt-6 rounded-3xl overflow-hidden bg-amber-900/40 h-56 sm:h-72 shadow-2xl ring-4 ring-amber-700/80 -rotate-1 hover:rotate-0 transition duration-300"><img src="assets/kayubase.jpeg" alt="Woodchips Primewood" class="w-full h-full object-cover" onerror="this.style.display='none'"></div>
+      </div>
+      <div class="lg:max-w-md lg:ml-auto w-full">${loginBox()}</div>
+    </div></section>
+  <section id="products" class="max-w-6xl mx-auto px-4 py-14">
+    <h2 class="text-3xl font-bold text-green-900">Products</h2>
+    <p class="text-stone-600 mt-1 mb-8">Pilih produk, lalu tekan Pesan. ${me() ? '' : 'Kamu perlu masuk atau daftar dulu.'}</p>
+    <div class="grid sm:grid-cols-2 gap-6">${productCard('woodchips')}${productCard('rencek')}</div></section>
+  <section id="about" class="about py-14"><div class="max-w-6xl mx-auto px-4 grid lg:grid-cols-2 gap-8">
+    <div>
+      <h2 class="text-3xl font-bold text-green-900">About Us</h2>
+      <p class="mt-1 italic text-green-700">"Kayu terbaik, langsung ke tungkumu."</p>
+      <p class="mt-4 text-stone-700">Primewood Industry adalah usaha penyedia woodchips dan kayu rencek di Palembang. Lewat web ini, pelanggan bisa melihat stok, memesan, dan membayar tanpa antre.</p>
+      <h3 class="font-semibold mt-5 text-green-900">Ciri woodchips & kayu yang baik</h3>
+      <ul class="list-disc ml-5 mt-2 text-stone-700 text-sm space-y-1">
+        <li>Kering dan kadar air rendah, tidak berjamur</li><li>Bersih dari tanah, kerikil, dan benda asing</li>
+        <li>Ukuran serpihan atau potongan seragam</li><li>Berasal dari kayu keras yang tahan lama</li></ul>
+      <h3 class="font-semibold mt-5 text-green-900">Alamat</h3>
+      <p class="text-stone-700 text-sm mt-1">${CFG.addr}</p>
+      <a href="${CFG.mapsLink}" target="_blank" rel="noopener" class="inline-block mt-3 text-green-700 font-semibold hover:underline">Buka di Google Maps</a>
+    </div>
+    <iframe title="Lokasi Primewood Industry" class="w-full h-80 rounded-2xl shadow-md border-0" loading="lazy"
+      src="https://maps.google.com/maps?q=${encodeURIComponent('Jl. Cengkeh Dua, Sako, Palembang')}&output=embed"></iframe>
+  </div></section>`;
+}
+
+/* ---------- PEMESANAN ---------- */
+function startOrder(k) {
+  if (!me()) { alert('Silakan masuk atau daftar akun terlebih dahulu.'); return goto('home').valueOf() || document.getElementById('login')?.scrollIntoView({ behavior: 'smooth' }); }
+  S.draft = { key: k, qty: 1, note: '' }; S.view = 'order'; render(); window.scrollTo(0, 0);
+}
+function changeQty(d) {
+  const x = S.draft, m = maxQty(x.key); x.qty = Math.min(m, Math.max(1, x.qty + d)); render();
+}
+const calc = x => { const p = PRODUCTS[x.key]; return { kg: Math.round(x.qty * p.kgPerUnit), total: x.qty * p.price }; };
+function orderView() {
+  const x = S.draft, p = PRODUCTS[x.key], c = calc(x);
+  return `<main class="max-w-2xl mx-auto px-4 py-10">
+    <button onclick="S.view='home';render()" class="text-sm text-green-700 hover:underline mb-4">&larr; Kembali ke produk</button>
+    <div class="bg-white rounded-2xl shadow-md p-6">
+      <h2 class="text-2xl font-bold text-green-900">Form Pemesanan</h2>
+      <div class="flex gap-4 mt-5"><div class="w-24 h-24 rounded-xl bg-green-100 overflow-hidden shrink-0"><img src="${p.img}" class="w-full h-full object-cover" onerror="this.style.display='none'"></div>
+        <div><p class="font-bold text-lg">${p.name}</p><p class="text-stone-500 text-sm">${rp(p.price)} / ${p.unit}</p>
+        <p class="text-xs text-stone-500 mt-1">Stok: ${fmt(stock()[x.key])} ${p.stockUnit}</p></div></div>
+      <p class="mt-6 text-sm font-medium">Jumlah (${p.unit})</p>
+      <div class="flex items-center gap-3 mt-2">
+        <button onclick="changeQty(-1)" class="w-10 h-10 rounded-lg bg-stone-200 hover:bg-stone-300 text-xl font-bold">−</button>
+        <span class="w-14 text-center text-xl font-bold">${x.qty}</span>
+        <button onclick="changeQty(1)" class="w-10 h-10 rounded-lg bg-green-700 hover:bg-green-800 text-white text-xl font-bold">+</button></div>
+      <div class="mt-5 bg-green-50 rounded-xl p-4 text-sm space-y-1">
+        <div class="flex justify-between"><span>Perkiraan berat</span><b>±${fmt(c.kg)} kg</b></div>
+        <div class="flex justify-between text-base"><span>Total harga</span><b class="text-green-800">${rp(c.total)}</b></div></div>
+      <label class="block mt-5 text-sm font-medium">Keterangan / catatan produk</label>
+      <textarea oninput="S.draft.note=this.value" rows="3" placeholder="Contoh: kirim sore hari, karung dobel, dll." class="w-full mt-1 border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600">${x.note}</textarea>
+      <button onclick="S.draft.orderedAt=new Date().toLocaleString('id-ID');S.view='pay';S.method=null;render();window.scrollTo(0,0)" class="w-full mt-5 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg py-3 transition">Lanjut ke pembayaran</button>
+    </div></main>`;
+}
+
+/* ---------- PEMBAYARAN ---------- */
+const BANKS = { qris: 'QRIS', mandiri: 'Bank Mandiri', bca: 'BCA', bni: 'BNI', bri: 'BRI' };
+const PREFIX = { mandiri: '88608', bca: '39358', bni: '8808', bri: '26215' };
+function pickMethod(m) {
+  S.method = m; S.va = m === 'qris' ? '' : PREFIX[m] + String(Math.floor(Math.random() * 1e10)).padStart(10, '0'); render();
+}
+function qrHtml() {
+  return `<img src="assets/qrisgego.jpeg" alt="QRIS Primewood Industry" class="w-64 max-w-full mx-auto rounded-xl border border-stone-200 shadow" onerror="this.outerHTML='<p class=&quot;text-sm text-red-600&quot;>Gambar assets/qrisgego.jpeg tidak ditemukan.</p>'">`;
+}
+function payView() {
+  const x = S.draft, p = PRODUCTS[x.key], c = calc(x);
+  let body;
+  if (!S.method) body = `<button onclick="S.method='choose';render()" class="w-full bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg py-3 transition">Pembayaran Nontunai</button>`;
+  else if (S.method === 'choose') body = `<p class="text-sm font-medium mb-2">Pilih metode pembayaran</p><div class="grid grid-cols-2 gap-3">
+    ${Object.entries(BANKS).map(([k, v]) => `<button onclick="pickMethod('${k}')" class="border border-stone-300 hover:border-green-700 hover:bg-green-50 rounded-xl py-3 font-semibold transition">${k === 'qris' ? '▦ ' : '🏦 '}${k === 'qris' ? v : 'VA ' + v}</button>`).join('')}</div>`;
+  else body = `<div class="text-center"><p class="font-semibold mb-3">${S.method === 'qris' ? 'Scan QRIS' : 'Virtual Account ' + BANKS[S.method]}</p>
+    ${S.method === 'qris' ? qrHtml() : `<p class="text-2xl font-bold tracking-wider bg-stone-100 rounded-lg py-3">${S.va}</p>`}
+    <p class="text-sm text-stone-500 mt-3">Total bayar <b class="text-green-800">${rp(c.total)}</b></p>
+    <button onclick="confirmPay()" class="w-full mt-4 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg py-3 transition">Saya sudah bayar</button>
+    <button onclick="S.method='choose';render()" class="mt-2 text-sm text-green-700 hover:underline">Ganti metode</button>
+    <p class="text-xs text-stone-400 mt-3">Mode simulasi: pembayaran belum terhubung ke bank/payment gateway sungguhan.</p></div>`;
+  return `<main class="max-w-xl mx-auto px-4 py-10"><button onclick="S.view='order';render()" class="text-sm text-green-700 hover:underline mb-4">&larr; Kembali</button>
+    <div class="bg-white rounded-2xl shadow-md p-6"><h2 class="text-2xl font-bold text-green-900">Pembayaran</h2>
+    <div class="mt-4 bg-green-50 rounded-xl p-4 text-sm space-y-1">
+      <div class="flex justify-between"><span>${p.name}</span><b>${x.qty} ${p.unit}</b></div>
+      <div class="flex justify-between"><span>Perkiraan berat</span><b>±${fmt(c.kg)} kg</b></div>
+      ${x.note ? `<div class="flex justify-between gap-4"><span>Catatan</span><b class="text-right">${x.note}</b></div>` : ''}
+      <div class="flex justify-between text-base pt-1 border-t border-green-200"><span>Total</span><b class="text-green-800">${rp(c.total)}</b></div></div>
+    <div class="mt-5">${body}</div></div></main>`;
+}
+function confirmPay() {
+  const x = S.draft, p = PRODUCTS[x.key], u = me();
+  if (x.qty > maxQty(x.key)) { alert('Stok tidak mencukupi. Silakan kurangi jumlah.'); S.view = 'order'; return render(); }
+  const st = stock(); st[x.key] -= x.qty * p.use; db.set('pw_stock', st);
+  const o = { id: 'PW' + Date.now().toString().slice(-7), date: new Date().toLocaleString('id-ID'), name: u.name, email: u.email, key: x.key,
+    qty: x.qty, kg: calc(x).kg, total: calc(x).total, method: BANKS[S.method], va: S.va, orderedAt: x.orderedAt || new Date().toLocaleString('id-ID'), note: x.note, status: 'Menunggu' };
+  db.set('pw_orders', [o, ...orders()]); S.lastOrder = o; S.view = 'done'; render(); window.scrollTo(0, 0);
+}
+function doneView() {
+  const o = S.lastOrder, p = PRODUCTS[o.key];
+  const msg = `Halo, saya mengkonfirmasi pemesanan ${p.name} sebanyak ${o.qty} ${p.unit}, Pembayaran berhasil.`;
+  return `<main class="max-w-lg mx-auto px-4 py-14 text-center"><div class="bg-white rounded-2xl shadow-md p-8">
+    <div class="text-5xl">✅</div><h2 class="text-2xl font-bold text-green-900 mt-3">Pembayaran berhasil</h2>
+    <p class="text-stone-600 mt-2 text-sm">Pesanan <b>${o.id}</b> (${p.name}, ${o.qty} ${p.unit}) sudah kami terima dan menunggu persetujuan admin. Konfirmasi lewat WhatsApp agar diproses lebih cepat.</p>
+    <a href="https://wa.me/${CFG.wa}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener" class="block mt-6 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg py-3 transition">Konfirmasi ke WhatsApp</a>
+    <div class="mt-3 flex justify-center gap-4 text-sm"><button onclick="S.view='history';S.draft=null;render();window.scrollTo(0,0)" class="text-green-700 font-semibold hover:underline">Lihat riwayat pemesanan</button>
+    <button onclick="S.view='home';S.draft=null;render();window.scrollTo(0,0)" class="text-green-700 hover:underline">Kembali ke beranda</button></div></div></main>`;
+}
+
+/* ---------- RIWAYAT ---------- */
+function historyView() {
+  const u = me(), mine = orders().filter(o => o.email === u.email);
+  const st = { Menunggu: ['bg-yellow-100 text-yellow-800', 'Menunggu persetujuan admin'], Diterima: ['bg-green-100 text-green-800', 'Diterima'], Ditolak: ['bg-red-100 text-red-800', 'Ditolak'] };
+  const item = (t, v) => `<div><dt class="text-xs text-stone-500">${t}</dt><dd class="font-medium">${v}</dd></div>`;
+  const cards = mine.map(o => { const p = PRODUCTS[o.key], via = o.method === 'QRIS' ? 'QRIS (nontunai)' : 'Virtual Account ' + o.method + ' (nontunai)';
+    return `<article class="woodcard bg-white rounded-2xl shadow-md p-5">
+      <div class="flex flex-wrap justify-between items-start gap-2"><div><p class="font-bold text-green-900 text-lg">${p.name}</p>
+        <p class="text-xs text-stone-500">No. pesanan ${o.id}</p></div>
+        <span class="px-3 py-1 rounded-full text-xs font-semibold ${st[o.status][0]}">${st[o.status][1]}</span></div>
+      <dl class="grid sm:grid-cols-2 gap-x-6 gap-y-3 mt-4 text-sm">
+        ${item('Jumlah', o.qty + ' ' + p.unit + ' (±' + fmt(o.kg) + ' kg)')}${item('Total pembayaran', rp(o.total))}
+        ${item('Dibayar melalui', via + (o.va ? '<br><span class="text-xs text-stone-500">No. VA ' + o.va + '</span>' : ''))}
+        ${item('Waktu pemesanan', o.orderedAt || o.date)}${item('Waktu pembayaran', o.date)}
+        ${o.note ? item('Catatan', o.note) : ''}</dl></article>`; }).join('');
+  return `<main class="max-w-3xl mx-auto px-4 py-10"><button onclick="S.view='home';render()" class="text-sm text-green-700 hover:underline mb-4">&larr; Kembali ke beranda</button>
+    <h2 class="text-3xl font-bold text-green-900">Riwayat Pemesanan</h2><p class="text-stone-600 text-sm mt-1 mb-6">Semua pesanan atas nama ${u.name}.</p>
+    <div class="space-y-4">${cards || '<div class="bg-white rounded-2xl shadow p-8 text-center text-stone-500">Belum ada pesanan. Pilih produk di halaman utama untuk mulai memesan.</div>'}</div></main>`;
+}
+
+/* ---------- ADMIN ---------- */
+function setStatus(id, s) {
+  const all = orders(), o = all.find(x => x.id === id);
+  if (!o || o.status !== 'Menunggu') return;
+  if (s === 'Ditolak') { const st = stock(); st[o.key] += o.qty * PRODUCTS[o.key].use; db.set('pw_stock', st); }
+  o.status = s; db.set('pw_orders', all); render();
+}
+function restock(e) {
+  e.preventDefault();
+  const f = e.target, k = f.prod.value, n = parseInt(f.amount.value, 10);
+  if (!n || n < 1) return alert('Isi jumlah restock yang valid.');
+  const st = stock(); st[k] += n; db.set('pw_stock', st); render();
+}
+function adminView() {
+  const all = orders(), act = all.filter(o => o.status !== 'Ditolak'), st = stock();
+  const sum = (k, f) => act.filter(o => o.key === k).reduce((a, o) => a + o[f], 0);
+  const stat = (t, v, s = '') => `<div class="bg-white rounded-xl shadow p-4"><p class="text-xs text-stone-500">${t}</p><p class="text-2xl font-bold text-green-800">${v}</p><p class="text-xs text-stone-500">${s}</p></div>`;
+  const alerts = Object.keys(PRODUCTS).filter(k => maxQty(k) < 1).map(k => `<div class="bg-red-50 border border-red-300 text-red-700 rounded-xl px-4 py-3 text-sm font-medium">⚠️ ${PRODUCTS[k].name} sedang habis (out of stock). Customer melihat label "Stok habis". Segera restock.</div>`).join('');
+  const badge = s => ({ Menunggu: 'bg-yellow-100 text-yellow-800', Diterima: 'bg-green-100 text-green-800', Ditolak: 'bg-red-100 text-red-800' }[s]);
+  const rows = all.map(o => `<tr class="border-t align-top">
+    <td class="p-3 whitespace-nowrap"><b>${o.id}</b><br><span class="text-xs text-stone-500">Pesan: ${o.orderedAt || o.date}<br>Bayar: ${o.date}</span></td>
+    <td class="p-3">${o.name}<br><span class="text-xs text-stone-500">${o.email}</span></td>
+    <td class="p-3">${PRODUCTS[o.key].name}<br><span class="text-xs text-stone-500">${o.qty} ${PRODUCTS[o.key].unit} · ±${fmt(o.kg)} kg</span></td>
+    <td class="p-3 whitespace-nowrap">${rp(o.total)}<br><span class="text-xs text-stone-500">${o.method}</span></td>
+    <td class="p-3 text-xs max-w-[160px]">${o.note || '-'}</td>
+    <td class="p-3"><span class="px-2 py-1 rounded-full text-xs font-semibold ${badge(o.status)}">${o.status}</span></td>
+    <td class="p-3 whitespace-nowrap">${o.status === 'Menunggu' ? `<button onclick="setStatus('${o.id}','Diterima')" class="bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg">Accept</button>
+      <button onclick="setStatus('${o.id}','Ditolak')" class="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg ml-1">Declined</button>` : '-'}</td></tr>`).join('');
+  return `<main class="max-w-6xl mx-auto px-4 py-8 space-y-6">
+    <h1 class="text-3xl font-bold text-green-900">Dashboard Admin</h1>
+    ${alerts}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      ${stat('Total pesanan', all.length, all.filter(o => o.status === 'Menunggu').length + ' menunggu')}
+      ${stat('Woodchips dipesan', fmt(sum('woodchips', 'qty')) + ' karung', '±' + fmt(sum('woodchips', 'kg')) + ' kg')}
+      ${stat('Kayu rencek dipesan', fmt(sum('rencek', 'qty')) + ' pcs', '±' + fmt(sum('rencek', 'kg')) + ' kg')}
+      ${stat('Pendapatan diterima', rp(all.filter(o => o.status === 'Diterima').reduce((a, o) => a + o.total, 0)))}</div>
+    <section class="bg-white rounded-2xl shadow p-5"><h2 class="font-bold text-lg text-green-900 mb-3">Restock produk</h2>
+      <p class="text-sm text-stone-600 mb-3">Stok saat ini: Woodchips <b>${fmt(st.woodchips)} kg</b> · Kayu rencek <b>${fmt(st.rencek)} pcs</b></p>
+      <form onsubmit="restock(event)" class="flex flex-wrap gap-3 items-end">
+        <label class="text-sm">Produk<select name="prod" class="block border border-stone-300 rounded-lg px-3 py-2 mt-1"><option value="woodchips">Woodchips (kg)</option><option value="rencek">Kayu rencek (pcs)</option></select></label>
+        <label class="text-sm">Jumlah tambahan<input name="amount" type="number" min="1" required class="block border border-stone-300 rounded-lg px-3 py-2 mt-1 w-40"></label>
+        <button class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-5 py-2 transition">Tambah stok</button></form></section>
+    <section class="bg-white rounded-2xl shadow overflow-hidden"><h2 class="font-bold text-lg text-green-900 p-5 pb-3">Database pemesanan</h2>
+      <div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead class="bg-green-50 text-green-900"><tr>
+        ${['Order', 'Customer', 'Produk', 'Total', 'Catatan', 'Status', 'Aksi'].map(h => `<th class="p-3 font-semibold">${h}</th>`).join('')}</tr></thead>
+        <tbody>${rows || '<tr><td colspan="7" class="p-6 text-center text-stone-500">Belum ada pesanan.</td></tr>'}</tbody></table></div></section>
+  </main>`;
+}
+
+/* ---------- RENDER ---------- */
+function render() {
+  const u = me(); let v;
+  if (u && u.role === 'admin') v = adminView();
+  else if (S.view === 'order' && S.draft) v = orderView();
+  else if (S.view === 'pay' && S.draft) v = payView();
+  else if (S.view === 'done' && S.lastOrder) v = doneView();
+  else if (S.view === 'history' && u) v = historyView();
+  else { S.view = 'home'; v = homeView(); }
+  $('#app').innerHTML = nav() + v + footer();
+}
+render();
+</script>
+</body>
+</html>
